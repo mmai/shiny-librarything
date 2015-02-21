@@ -5,7 +5,9 @@
 *-Ex.R
 
 # R data files from past sessions
-.Rdata
+.RData
 
 # RStudio files
 .Rproj.user/
+
+shinyapps/
