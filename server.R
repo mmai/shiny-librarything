@@ -1,45 +1,5 @@
 library(shiny)
-library(dplyr)
-
-loadBooks <- function(tsvfile){
-    librarything <- read.delim2(tsvfile)
-    #Select variables
-    books <- select(librarything, one_of(c("Book.Id", "Title", "Primary.Author", "Date","Rating", "Page.Count", "Acquired", "Date.Started", "Date.Read", "Languages", "Original.Languages", "ISBN", "Dewey.Decimal", "Entry.Date")))
-    
-    #Set correct variable types
-    books$Entry.Date <- as.Date(books$Entry.Date, "[%Y-%m-%d]")
-    books$Acquired <- as.Date(books$Acquired, "[%Y-%m-%d]")
-    books$Date.Started <- as.Date(books$Date.Started, "[%Y-%m-%d]")
-    books$Date.Read <- as.Date(books$Date.Read, "[%Y-%m-%d]")
-    books$Date <- as.Date(books$Date, "%Y")
-    
-    books$Rating <- as.numeric(levels(books$Rating))[books$Rating]
-    
-    books$Title <- as.character(books$Title)
-    books$ISBN <- as.character(books$ISBN)
-    
-    #Fill missing values
-    missingAcquired <- is.na(books$Acquired)
-    books$Acquired[missingAcquired] <- books$Entry.Date[missingAcquired]
-    
-    missingDateStarted <- is.na(books$Date.Started) & !is.na(books$Date.Read)
-    books$Date.Started[missingDateStarted] <- min(books$Acquired[missingDateStarted], books$Date.Read[missingDateStarted])
-    # XXX : approx 20 read books miss page counts, quick fix waiting for a manual correction in the data:
-    books$Page.Count[is.na(books$Page.Count) & !is.na(books$Date.Read)] <- 300
-    
-    #Calculate average number of pages read by day for each finished book
-    books$DailyPagesRead <- with(books, 
-        ifelse(is.na(Date.Read), 
-            yes = 0,
-            no = Page.Count / (1 + as.numeric(Date.Read - Date.Started))
-        )
-    )
-    
-    books
-}
-
-#Load books
-books <- loadBooks("librarything_aipotu.tsv")
+library(ggplot2)
 
 #Calculate average number of pages read by day
 readingDays <- seq(min(books$Date.Started, na.rm=TRUE), max(books$Date.Read, na.rm=TRUE), by="1 day")
@@ -54,10 +14,6 @@ for (idbook in 1:nrow(books)){
             dailyPageRead[curday] = dailyPageRead[curday] + book$DailyPagesRead
         }
     }
-    if(length(dailyPageRead[is.na(dailyPageRead)])){
-        print(book)
-        dailyPageRead = 0
-    }
 }
 
 shinyServer(function(input, output) {
@@ -71,6 +27,16 @@ shinyServer(function(input, output) {
         #granularity <- input$granularity
         
         year <- input$year
+        languages <- input$languages
+        
+        #Filter by languages
+        books <- allbooks
+        if ("Other" %in% languages){
+            excludedLanguages <- mainlanguages[!mainlanguages %in% languages]
+            books <- books[!books$Original.Languages %in% excludedLanguages,]
+        } else {
+            books <- books[books$Original.Languages %in% languages,]
+        }
 
         if (year == "0"){
             granularity = "year"
@@ -119,12 +85,20 @@ shinyServer(function(input, output) {
         total_finished <- nrow(finished)
         total_rating <- mean(finished$Rating)
         finished.count <- countByPeriod(finished$Date.Read, periods, dateformat)
+        total_pages <- sum(dailyPageRead[names(dailyPageRead) >= date_begin & names(dailyPageRead) <= date_end])
         
         #output$distPlot <- renderPlot({
             bookscount <- matrix(c(acquired.count, started.count, finished.count), byrow=TRUE, nrow=3)
             barplot(bookscount, names.arg = periods, beside=TRUE) 
         #})
         
+        #Plot authors
+        author_pages <- with(finished, aggregate(Page.Count, by = list(Primary.Author), sum))
+        author_ratings <- with(finished, aggregate(Rating, by = list(Primary.Author), mean))
+        authors <- data.frame(author = author_pages$Group.1, nbpages = author_pages$x, ratings = author_ratings$x)
+        output$authorsPlot <- renderPlot({
+            ggplot(authors, aes(y=nbpages, x=ratings, label=author)) + geom_point() + geom_text(aes(label=author), hjust=0, vjust=0)
+        })
         
         # Plot average number of pages read
         if (dateformat == ""){
@@ -137,6 +111,7 @@ shinyServer(function(input, output) {
         }
         output$pagesPlot <- renderPlot({
             barplot(pagecount)
+            #plot(dailyPageRead[names(dailyPageRead) >= date_begin & names(dailyPageRead) <= date_end], type = "l")
         })
         
         # Plot books count
@@ -154,6 +129,7 @@ shinyServer(function(input, output) {
         output$total_started <- renderText({ total_started })
         output$total_finished <- renderText({ total_finished })
         output$total_rating <- renderText({ total_rating })
+        output$total_pages <- renderText({ total_pages })
     })
 
 })
