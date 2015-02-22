@@ -1,46 +1,38 @@
 library(shiny)
 library(markdown)
 
-shinyUI(navbarPage("Librarything",
-    tabPanel("Documentation",       
-             fluidRow(
-                 column(6, includeMarkdown("about.md")),
-                 column(6, includeMarkdown("documentation.md"))
-             )
-        #includeMarkdown("documentation.md")
-    ),
-    tabPanel("Application",
-             # Application title
-             titlePanel("Reading habits"),
-    # Sidebar with a slider input for the number of bins
-    sidebarLayout(
+shinyUI(
+    pageWithSidebar(
+        headerPanel('Reading habits'),
         sidebarPanel(
-            selectInput('year', 'Year:', c("All" = 0, 2007:2015)),
-            checkboxGroupInput('languages', 'Original language', 
-                               c(mainlanguages, "Other"),
-                               selected =  c(mainlanguages, "Other"),
-                               )
-            #,dateRangeInput('dateRange', label = 'Date range input: yyyy-mm-dd',  start = "2007-01-01", end = "2015-02-01"),
-            #,radioButtons("granularity", "Time granularity:", c("All" = "all", "year" = "year", "month" = "month"))
-            
+            includeMarkdown("documentation.md")    
         ),
         
         # Show a plot of the generated distribution
         mainPanel(
-            wellPanel(
-                span("Number of books bought:", textOutput("total_acquired")),
-                span("Number of books started:", textOutput("total_started")),
-                span("Number of books finished:", textOutput("total_finished")),
-                span("Number of pages read:", textOutput("total_pages")),
-                span("Average rating:", textOutput("total_rating"))
-            ),
-            plotOutput("authorsPlot"),
-            plotOutput("globalPlot"),
-            plotOutput("pagesPlot"),
+            fluidRow(
+                column(6,
+                       selectInput('year', 'Year:', c("All" = 0, 2007:2015)),
+                       checkboxGroupInput('languages', 'Original language', 
+                                          c(mainlanguages, "Other"),
+                                          selected =  c(mainlanguages, "Other"),
+                       )
+                      ),
+                column(6,   wellPanel(
+                    h4("Summary", textOutput("summary_info", inline=TRUE)),
+                    div("Number of books acquired:", strong(textOutput("total_acquired", inline=TRUE))),
+                    div("Number of books started:", strong(textOutput("total_started", inline=TRUE))),
+                    div("Number of books finished:", strong(textOutput("total_finished", inline=TRUE))),
+                    #div("Number of pages read:", strong(textOutput("total_pages", inline=TRUE))),
+                    div("Average rating:", strong(textOutput("total_rating", inline=TRUE)))
+                ))
+                )
+          ,
+            #plotOutput("pagesPlot"),
+            plotOutput("distPlot"),
             plotOutput("ratingsPlot"),
-            plotOutput("distPlot")
+            plotOutput("authorsPlot")
         )
     )
-    )
-))
+)
 

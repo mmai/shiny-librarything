@@ -2,19 +2,19 @@ library(shiny)
 library(ggplot2)
 
 #Calculate average number of pages read by day
-readingDays <- seq(min(books$Date.Started, na.rm=TRUE), max(books$Date.Read, na.rm=TRUE), by="1 day")
-dailyPageRead <- rep(0, length(readingDays)) 
-names(dailyPageRead) <- readingDays
-for (idbook in 1:nrow(books)){ 
-    book <- books[idbook,]
-    if (!is.na(book$Date.Read)){
-        bookDates <- as.character(seq(book$Date.Started, book$Date.Read, by="1 day"))
-        for (i in seq_along(bookDates)) {
-            curday <- bookDates[i]
-            dailyPageRead[curday] = dailyPageRead[curday] + book$DailyPagesRead
-        }
-    }
-}
+#readingDays <- seq(min(books$Date.Started, na.rm=TRUE), max(books$Date.Read, na.rm=TRUE), by="1 day")
+#dailyPageRead <- rep(0, length(readingDays)) 
+#names(dailyPageRead) <- readingDays
+#for (idbook in 1:nrow(books)){ 
+#    book <- books[idbook,]
+#    if (!is.na(book$Date.Read)){
+#        bookDates <- as.character(seq(book$Date.Started, book$Date.Read, by="1 day"))
+#       for (i in seq_along(bookDates)) {
+#            curday <- bookDates[i]
+#            dailyPageRead[curday] = dailyPageRead[curday] + book$DailyPagesRead
+#        }
+#    }
+#}
 
 shinyServer(function(input, output) {
   #  viz <- reactive({
@@ -39,10 +39,12 @@ shinyServer(function(input, output) {
         }
 
         if (year == "0"){
+            output$summary_info <- renderText({ "" })
             granularity = "year"
             date_begin = as.Date("2007-01-01")
             date_end = as.Date(Sys.time())
         } else {
+            output$summary_info <- renderText({ paste(" for the year", year) })
             granularity = "month"
             date_begin = as.Date(paste(year, "-01-01", sep=""))
             date_end = as.Date(paste(year, "-12-31", sep=""))
@@ -85,51 +87,68 @@ shinyServer(function(input, output) {
         total_finished <- nrow(finished)
         total_rating <- mean(finished$Rating)
         finished.count <- countByPeriod(finished$Date.Read, periods, dateformat)
-        total_pages <- sum(dailyPageRead[names(dailyPageRead) >= date_begin & names(dailyPageRead) <= date_end])
+        #total_pages <- sum(dailyPageRead[names(dailyPageRead) >= date_begin & names(dailyPageRead) <= date_end])
+        
+        #Plots : x axis labels
+        if (granularity == "month"){
+            namesArgs <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec")
+        } else {
+            namesArgs <- "2007":"2015"    
+        }
         
         #output$distPlot <- renderPlot({
             bookscount <- matrix(c(acquired.count, started.count, finished.count), byrow=TRUE, nrow=3)
-            barplot(bookscount, names.arg = periods, beside=TRUE) 
+            barplot(bookscount, 
+                    legend.text=c("Acquired", "Started", "Finished"), 
+                    main="Number of books acquired, started and finished", 
+                    ylab="Number of books", xlab=granularity, 
+                    names.arg=namesArgs, beside=TRUE) 
         #})
+        
+        # Plot ratings
+        output$ratingsPlot <- renderPlot({
+            barplot(table(finished$Rating),
+                    main="Repartition of ratings",
+                    xlab="Ratings", ylab="Frequency")
+        })
         
         #Plot authors
         author_pages <- with(finished, aggregate(Page.Count, by = list(Primary.Author), sum))
         author_ratings <- with(finished, aggregate(Rating, by = list(Primary.Author), mean))
         authors <- data.frame(author = author_pages$Group.1, nbpages = author_pages$x, ratings = author_ratings$x)
         output$authorsPlot <- renderPlot({
-            ggplot(authors, aes(y=nbpages, x=ratings, label=author)) + geom_point() + geom_text(aes(label=author), hjust=0, vjust=0)
+            ggplot(authors, aes(y=nbpages, x=ratings, label=author)) + 
+                #geom_point() + 
+                geom_text(aes(label=author), hjust=0.8) +
+                labs(title="Authors ranked by average rating and number of pages read", x="Ratings", y="Number of pages read") +
+                theme(plot.title = element_text(face = "bold"))
         })
         
         # Plot average number of pages read
-        if (dateformat == ""){
-            pagecount = sum(dailyPageRead, na.rm=TRUE)
-        } else {
-            pagecount = sapply(periods, function(period){ 
-                inPeriod = grep(paste("^", period, sep=""), names(dailyPageRead))
-                sum(dailyPageRead[inPeriod]) 
-            })
-        }
-        output$pagesPlot <- renderPlot({
-            barplot(pagecount)
-            #plot(dailyPageRead[names(dailyPageRead) >= date_begin & names(dailyPageRead) <= date_end], type = "l")
-        })
+        #if (dateformat == ""){
+        #    pagecount = sum(dailyPageRead, na.rm=TRUE)
+        #} else {
+        #    pagecount = sapply(periods, function(period){ 
+        #        inPeriod = grep(paste("^", period, sep=""), names(dailyPageRead))
+        #        sum(dailyPageRead[inPeriod]) 
+        #    })
+        #}
+        #output$pagesPlot <- renderPlot({
+        #    barplot(pagecount, main="Number of pages read", ylab="Number of pages read", xlab=granularity, names.arg=namesArgs)
+        #})
         
         # Plot books count
-        output$globalPlot <- renderPlot({
-            counts <- c(total_acquired, total_started, total_finished)
-            barplot(counts, col=c("red", "blue", "green"))
-        })
-        
-        # Plot ratings
-        output$ratingsPlot <- renderPlot({
-            hist(finished$Rating)
-        })
+        #output$globalPlot <- renderPlot({
+        #    counts <- c(total_acquired, total_started, total_finished)
+        #    barplot(counts, col=c("red", "blue", "green"))
+        #})
+
 
         output$total_acquired <- renderText({ total_acquired })
         output$total_started <- renderText({ total_started })
         output$total_finished <- renderText({ total_finished })
-        output$total_rating <- renderText({ total_rating })
-        output$total_pages <- renderText({ total_pages })
+        output$total_rating <- renderText({ paste(signif(total_rating, 3), " / 5") })
+        output$total_pages <- renderText({ round(total_pages) })
     })
 
 })

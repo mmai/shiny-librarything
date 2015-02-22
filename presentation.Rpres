@@ -1,0 +1,66 @@
+Analysing Librarything data to discover my reading habits
+========================================================
+author: Henri Bourcereau
+date: 
+
+Introduction
+========================================================
+
+* Since 2007, I use the [Librarything](http://www.librarything.fr/catalog.php?view=aipotu) website to track the books I purchase and read.
+* This application shows some statistics about my reading habits based on an export of this data.
+
+* I tend to buy more books than I can read, I wanted to know exactly what was the extend of the problem by displaying the evolution of books read versus books acquired each month.
+* This was also the occasion to have a look at some other trends about my reading habits.
+
+Data structure 
+========================================================
+<small>
+Tab separated values file downloaded from the Librarything profile page
+```{r}
+dt <- names(read.delim2("librarything_aipotu.tsv"))
+paste(dt, collapse=" | ")
+```
+</small>
+
+Input widgets
+========================================================
+
+* selection of the year (or all the period)
+* selection of the original language
+
+![widgets](ra.png)
+
+Plots and summary are automatically refreshed when any input value is modified.
+
+Output plot example
+========================================================
+```{r echo=FALSE}
+source("global.R")
+books <- allbooks
+date_begin = as.Date("2007-01-01")
+date_end = as.Date(Sys.time())
+acquired <- books[books$Acquired >= date_begin & books$Acquired <= date_end,]
+started <- books[!is.na(books$Date.Started) & books$Date.Started >= date_begin & books$Date.Started <= date_end,]
+finished <- books[!is.na(books$Date.Read) & books$Date.Read >= date_begin & books$Date.Read <= date_end,]
+
+dateformat <- "%Y"
+periods <- strftime(seq(date_begin, date_end, "year"), dateformat)
+
+countByPeriod <- function(datevector, periods, dateformat){
+                sapply(periods, function(period){ 
+                    length(datevector[strftime(datevector, dateformat) == period]) 
+                })
+        }
+        
+acquired.count <- countByPeriod(acquired$Acquired, periods, dateformat)
+started.count <- countByPeriod(started$Date.Started, periods, dateformat)
+finished.count <- countByPeriod(finished$Date.Read, periods, dateformat)
+bookscount <- matrix(c(acquired.count, started.count, finished.count), byrow=TRUE, nrow=3)   
+barplot(bookscount, legend.text=c("Acquired", "Started", "Finished"), 
+                    main="Number of books acquired, started and finished", 
+                    ylab="Number of books", xlab="Year", 
+                    names.arg="2007":"2015", beside=TRUE) 
+
+```
+***
+See the final product on https://mmai.shinyapps.io/librarything/
